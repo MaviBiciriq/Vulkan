@@ -1,55 +1,32 @@
-name: Android rayquery APK
+name: Android APK Build
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
 
 jobs:
-  android:
+  android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
+    timeout-minutes: 60
 
-      - uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-java@v4
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "11"
 
-      - uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Show repo layout
-        run: |
-          ls
-          ls android
-          ls assets | head
-
-      - name: Build rayquery (falls back to all samples)
+      - name: Build Android samples
         working-directory: android
         run: |
-          chmod +x gradlew
-          MOD=$(./gradlew projects -q --no-daemon | grep -io "':[^']*rayquery[^']*'" | head -1 | tr -d "'" || true)
-          echo "Module found: '$MOD'"
-          if [ -n "$MOD" ]; then
-            ./gradlew "$MOD:assembleDebug" --no-daemon --stacktrace
-          else
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          fi
-
-      - name: Collect APK
-        run: |
-          mkdir -p out
-          find . -iname "*rayquery*.apk" -exec cp {} out/ \;
-          ls -lh out
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rayquery-apk
-          path: out/*.apk
-          if-no-files-found: error
+          ./gradlew assembleDebug
