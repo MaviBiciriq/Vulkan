@@ -1,33 +1,55 @@
-  build_android:
-    name: Build Android
-    runs-on: ubuntu-latest
+name: Android rayquery APK
 
+on:
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - uses: actions/checkout@v4
         with:
-          submodules: "recursive"
+          submodules: recursive
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+      - name: Show repo layout
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-26" "build-tools;26.0.3" "ndk;25.2.9519653"
+          ls
+          ls android
+          ls assets | head
 
-      - name: Build Android
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/25.2.9519653
+      - name: Build rayquery (falls back to all samples)
+        working-directory: android
         run: |
-          cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          MOD=$(./gradlew projects -q --no-daemon | grep -io "':[^']*rayquery[^']*'" | head -1 | tr -d "'" || true)
+          echo "Module found: '$MOD'"
+          if [ -n "$MOD" ]; then
+            ./gradlew "$MOD:assembleDebug" --no-daemon --stacktrace
+          else
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          find . -iname "*rayquery*.apk" -exec cp {} out/ \;
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rayquery-apk
+          path: out/*.apk
+          if-no-files-found: error
